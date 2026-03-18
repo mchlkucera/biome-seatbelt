@@ -1,0 +1,28 @@
+{
+  "name": "biome-seatbelt",
+  "version": "0.1.0",
+  "description": "Ratcheting baseline tool for Biome lint — your codebase can only get better, never worse",
+  "type": "module",
+  "bin": {
+    "biome-seatbelt": "./biome-seatbelt.mjs"
+  },
+  "files": [
+    "biome-seatbelt.mjs",
+    "README.md"
+  ],
+  "keywords": [
+    "biome",
+    "lint",
+    "ratchet",
+    "baseline",
+    "seatbelt"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abugo/biome-seatbelt"
+  }
+}
