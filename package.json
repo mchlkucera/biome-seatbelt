@@ -1,0 +1,29 @@
+{
+  "name": "biome-seatbelt",
+  "version": "0.2.0",
+  "description": "Gradually tighten Biome lint rules across your codebase. Like eslint-seatbelt, but for Biome.",
+  "type": "module",
+  "bin": {
+    "biome-seatbelt": "./biome-seatbelt.mjs"
+  },
+  "keywords": [
+    "biome",
+    "lint",
+    "ratchet",
+    "seatbelt",
+    "baseline",
+    "eslint-seatbelt",
+    "code-quality"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mchlkucera/biome-seatbelt"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "biome-seatbelt.mjs"
+  ]
+}

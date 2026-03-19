@@ -1,117 +1,45 @@
-# biome-seatbelt — Plan
+# biome-seatbelt — Production Merge Plan
 
-## Outcome
+## Decision: One variant, Node.js base
 
-A ratcheting tool for Biome that gradually tightens lint rules across a codebase.
+Merging Variant B (Node.js) as the production version at repo root, with fixes from Variant A's strengths. Node.js wins on portability — every JS project already has it.
 
-**What it does:**
-- Runs `biome lint --reporter=json`, parses structured output
-- Maintains a TSV baseline file tracking allowed violation counts per file per rule
-- Blocks commits/CI when any count increases
-- Auto-tightens counts when developers fix violations
-- Bootstraps from an existing codebase (snapshot current state as baseline)
-- Reports progress (delta from baseline, rules improving/stuck)
+## Changes to make
 
-**What success looks like:** Run `biome-seatbelt check` on a codebase with Biome configured, and it tells you if you made things worse. Run `biome-seatbelt update` and it tightens the ratchet.
+### P0: Critical bug fixes
 
----
+1. **Streaming stdout** — Replace `execFileSync` with `child_process.spawn` + chunk collection. Removes the 50MB buffer limit that crashed on shadcn-ui (128MB JSON). Take the pattern from Variant A's `Bun.spawn` approach.
 
-## Approach: Two variants, pick the winner
+2. **Config error detection** — When biome exits non-zero AND stdout is empty/unparseable, read stderr and surface the error. Never create an empty baseline silently. Both variants had this wrong in different ways.
 
-### Variant 1: Single-file Bun script (`biome-seatbelt.ts`)
+3. **Byte-level sort** — Replace `localeCompare` with `a < b ? -1 : a > b ? 1 : 0` for TSV sorting. Deterministic regardless of locale. Both variants must produce identical baselines.
 
-One TypeScript file, zero dependencies, run with `bun run biome-seatbelt.ts`.
-Fastest path to a working prototype. If it works well, becomes the core of Variant 2.
+### P1: Integration features (the real value)
 
-### Variant 2: npm CLI package
+4. **`CI=1` auto-detection** — If `CI` env var is set and no command given, default to `check`. This means CI pipelines just run `biome-seatbelt` with no args.
 
-Proper `package.json`, bin entry, publishable to npm as `biome-seatbelt`.
-Built on top of whatever works from Variant 1.
+5. **`--json` output mode** — Structured JSON output for agents. Format:
+   ```json
+   { "status": "fail", "regressions": [...], "improvements": [...], "summary": { "total": N, "delta": N } }
+   ```
 
-We start with Variant 1. If the core logic is solid, wrapping it as Variant 2 is trivial.
+6. **`init --update` flag** — Add new violations to existing baseline without resetting existing entries. For when you enable a new rule mid-project.
 
----
+### P2: Distribution & docs
 
-## TSV Baseline Format
+7. **package.json at root** — Proper npm package with bin entry, description, keywords, repository URL.
 
-Same format as eslint-seatbelt for familiarity:
+8. **README.md** — Two sections: "For humans" (hook recipes for husky, lefthook, lint-staged) and "For agents" (CLAUDE.md snippet, --json usage).
 
-```
-# biome-seatbelt baseline — do not edit manually
-# file	rule	count
-src/components/Button.tsx	lint/complexity/noForEach	2
-src/utils/parse.ts	lint/suspicious/noExplicitAny	5
-src/utils/parse.ts	lint/style/useConst	1
-```
+9. **Move variants to `variants/` (archive)** — Keep for reference, production is root `biome-seatbelt.mjs`.
 
-Tab-separated. Sorted by file, then rule. Minimal merge conflicts.
+### P3: Test updates
 
----
+10. **Update test harness** — Point tests at root `biome-seatbelt.mjs`, add tests for new features (CI=1, --json, init --update, large output handling, config error detection).
 
-## Commands
+## Execution order
 
-```
-biome-seatbelt init          # Run biome lint, snapshot all violations as baseline
-biome-seatbelt check         # Run biome lint, fail if any count exceeds baseline
-biome-seatbelt update        # Run biome lint, tighten baseline to current counts (ratchet down)
-biome-seatbelt status        # Show summary: total violations, delta from baseline, top rules
-```
-
-### Environment variables
-
-- `BIOME_SEATBELT_FILE` — custom path to baseline file (default: `biome-seatbelt.tsv`)
-- `BIOME_SEATBELT_FROZEN=1` — same as `check`, for CI
-- `BIOME_SEATBELT_BIOME_BIN` — custom path to biome binary
-
----
-
-## Implementation Steps
-
-### Step 1: Parse Biome JSON output
-
-- Run `biome lint --reporter=json` and capture stdout
-- Parse the JSON structure into `Map<file, Map<rule, count>>`
-- Handle: biome not installed, no files matched, biome config errors
-
-### Step 2: TSV baseline read/write
-
-- Read TSV into same `Map<file, Map<rule, count>>` structure
-- Write map back to sorted TSV
-- Handle: file doesn't exist yet (first run)
-
-### Step 3: Diff engine
-
-- Compare current violations against baseline
-- Produce a diff: new violations, reduced violations, removed files
-- This is the core logic everything else depends on
-
-### Step 4: Commands
-
-- `init` — run biome, write baseline from current state
-- `check` — run biome, diff against baseline, exit 1 if regressions
-- `update` — run biome, tighten baseline (only decrease counts, never increase)
-- `status` — run biome, print human-readable summary
-
-### Step 5: CLI argument parsing
-
-- Minimal arg parsing (no libraries for Variant 1, maybe `commander` for Variant 2)
-- Support `--file`, `--frozen`, `--verbose` flags
-- Forward unknown flags to `biome lint`
-
-### Step 6: Output formatting
-
-- Clear, colorized terminal output
-- Show exactly which files/rules regressed on `check` failure
-- Show progress stats on `status`
-
----
-
-## Later (not in prototype)
-
-- GitHub Action wrapper
-- Git hook integration (husky/lefthook recipe in README)
-- VS Code problem matcher
-- `--json` output mode for tooling
-- Auto-commit tightened baseline
-- Per-directory or per-team baselines
-- Biome plugin (when plugin system stabilizes)
+Steps 1-3 in parallel (independent bug fixes in the same file).
+Then 4-6 (features building on fixed base).
+Then 7-9 (packaging).
+Then 10 (verify everything).
